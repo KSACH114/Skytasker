@@ -148,11 +148,25 @@ class MainActivity : AppCompatActivity() {
         countdown(SEND_DELAY_SEC) {
             toast("正在通过 Shizuku 发送 ⇧…")
             executor.execute {
-                val result = ShizukuBridge.runVkbd(this@MainActivity)
+                val session = ShizukuBridge.startVkbdSession(this@MainActivity)
+                if (session == null) {
+                    mainHandler.post {
+                        binding.btnVkbd.isEnabled = true
+                        appendLog("启动常驻 vkbd 失败（Shizuku 未连/未授权？）")
+                        toast("启动失败，看日志")
+                    }
+                    return@execute
+                }
+                // 等键盘挂载稳定（create + START + 空报告 + 游戏枚举）
+                Thread.sleep(600)
+                val ok = session.sendKey()
+                // 等按键完成（按住 500ms + 缓冲）
+                Thread.sleep(800)
+                session.close()
                 mainHandler.post {
                     binding.btnVkbd.isEnabled = true
-                    appendLog(result)
-                    toast(if (result.startsWith("VKBD_OK")) "✅ vkbd 执行成功，看游戏反应" else "❌ vkbd 失败，看日志")
+                    appendLog(if (ok) "发键成功（测试会话已关闭）" else "发键失败（写 stdin 异常）")
+                    toast(if (ok) "✅ 已发键，看游戏反应" else "❌ 发送失败，看日志")
                 }
             }
         }

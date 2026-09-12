@@ -59,6 +59,10 @@ class UhidService : Service() {
     @Volatile
     private var lastSendAt = 0L
 
+    /** 常驻 vkbd 进程会话：键盘挂一次，点键只写 stdin，避免游戏反复插拔卡顿 */
+    @Volatile
+    private var vkbdSession: VkbdSession? = null
+
     override fun onCreate() {
         super.onCreate()
         createChannel()
@@ -78,12 +82,41 @@ class UhidService : Service() {
         }
 
         addOverlayIfNeeded()
+        ensureKeyboardAsync()
         Log.i(TAG, "[SVC] Shizuku alive=${ShizukuBridge.isAlive()} vkbd=${ShizukuBridge.vkbdPath(this)}")
 
         if (action == ACTION_SEND_SHIFT) {
             sendShiftAsync("intent")
         }
         return START_STICKY
+    }
+
+    // ---------------------------------------------------------------- 键盘常驻
+
+    /** 启动（或复用）常驻 vkbd 进程，键盘挂载一次后不销毁 */
+    private fun ensureKeyboardAsync() {
+        worker.execute {
+            val s = vkbdSession
+            if (s != null && s.isAlive()) {
+                Log.i(TAG, "[SVC] vkbd 常驻进程已存活，无需重建")
+                return@execute
+            }
+            Log.i(TAG, "[SVC] 启动常驻 vkbd…")
+            val session = ShizukuBridge.startVkbdSession(this@UhidService)
+            if (session == null) {
+                Log.e(TAG, "[SVC] 常驻 vkbd 启动失败（Shizuku 未连/未授权？）")
+                main.post {
+                    Toast.makeText(
+                        this@UhidService,
+                        "Shizuku 未连接，无法启动键盘",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                return@execute
+            }
+            vkbdSession = session
+            Log.i(TAG, "[SVC] 常驻 vkbd 已启动")
+        }
     }
 
     // ---------------------------------------------------------------- 前台服务
@@ -262,22 +295,18 @@ class UhidService : Service() {
         lastSendAt = now
         worker.execute {
             Log.i(TAG, "[SEND] 开始 source=$source thread=${Thread.currentThread().name}")
-            val alive = ShizukuBridge.isAlive()
-            val perm = ShizukuBridge.hasPermission()
-            if (alive && perm) {
-                Log.i(TAG, "[SEND] 走 Shizuku 路径（vkbd exec）")
-                val r = ShizukuBridge.runVkbd(this@UhidService)
-                Log.i(TAG, "[SEND] Shizuku 结果:\n$r")
-                val ok = r.startsWith("VKBD_OK")
-                main.post {
-                    Toast.makeText(
-                        this@UhidService,
-                        if (ok) "已通过 Shizuku 发送 ⇧" else "发送失败，看日志",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            } else {
-                Log.w(TAG, "[SEND] Shizuku 不可用 alive=$alive perm=$perm")
+
+            // 常驻会话不在（或已死）→ 尝试重建
+            var s = vkbdSession
+            if (s == null || !s.isAlive()) {
+                Log.w(TAG, "[SEND] vkbd 常驻进程不在/已死，重建")
+                s = ShizukuBridge.startVkbdSession(this@UhidService)
+                vkbdSession = s
+            }
+
+            val cur = s
+            if (cur == null) {
+                Log.e(TAG, "[SEND] 无可用 vkbd 会话（Shizuku 未连/未授权？）")
                 main.post {
                     Toast.makeText(
                         this@UhidService,
@@ -285,6 +314,17 @@ class UhidService : Service() {
                         Toast.LENGTH_LONG
                     ).show()
                 }
+                return@execute
+            }
+
+            val ok = cur.sendKey()
+            Log.i(TAG, "[SEND] sendKey 结果=$ok")
+            main.post {
+                Toast.makeText(
+                    this@UhidService,
+                    if (ok) "已发送 ⇧" else "发送失败，看日志",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -293,6 +333,18 @@ class UhidService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "[SVC] onDestroy thread=${Thread.currentThread().name}")
+
+        // 销毁常驻 vkbd 进程（关 stdin → vkbd EOF → destroy 键盘 → 退出）
+        vkbdSession?.let { s ->
+            Log.i(TAG, "[SVC] 关闭常驻 vkbd 进程")
+            try {
+                s.close()
+            } catch (t: Throwable) {
+                Log.e(TAG, "[SVC] 关闭 vkbd 会话异常", t)
+            }
+        }
+        vkbdSession = null
+
         overlayView?.let { v ->
             try {
                 wm?.removeView(v)

@@ -11,6 +11,7 @@ import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStream
 import java.io.InputStreamReader
+import java.io.OutputStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -26,8 +27,6 @@ import java.util.concurrent.TimeUnit
 object ShizukuBridge {
 
     private const val TAG = "SkyUhid"
-    /** vkbd 一次完整跑 create→Shift→destroy 约 1~2 秒 */
-    private const val VKBD_TIMEOUT_SEC = 15L
 
     /** Shizuku 服务端是否活着（未装/未启动都是 false） */
     fun isAlive(): Boolean = try {
@@ -59,26 +58,6 @@ object ShizukuBridge {
     /** vkbd 在解压后的 native 库目录里的完整路径 */
     fun vkbdPath(ctx: Context): String =
         ctx.applicationInfo.nativeLibraryDir + "/libvkbd.so"
-
-    /**
-     * 通过 Shizuku 跑一次 vkbd（一次性 create→左 Shift→destroy）。
-     * 返回 VKBD_OK / VKBD_FAIL 前缀 + 全部输出。
-     */
-    fun runVkbd(ctx: Context): String {
-        val path = vkbdPath(ctx)
-        Log.i(TAG, "[SHZ] runVkbd path=$path alive=${isAlive()} perm=${hasPermission()}")
-
-        if (!isAlive()) return "VKBD_FAIL\nShizuku 服务未运行（未安装或未启动）。"
-        if (!hasPermission()) return "VKBD_FAIL\nShizuku 未授权，请先点「⓪ 连接 Shizuku」完成授权。"
-        if (isPreV11()) return "VKBD_FAIL\nShizuku 版本过旧（< v11），请升级 Shizuku。"
-
-        val t0 = System.currentTimeMillis()
-        val out = execAndWait(arrayOf(path), VKBD_TIMEOUT_SEC)
-        val ms = System.currentTimeMillis() - t0
-
-        val ok = out.startsWith("EXIT=0")
-        return (if (ok) "VKBD_OK" else "VKBD_FAIL") + " (耗时 ${ms}ms)\n" + out
-    }
 
     /**
      * 通过 Shizuku 执行命令并等待结束。返回 "EXIT=<code>" + stdout + stderr。
@@ -121,6 +100,36 @@ object ShizukuBridge {
         return "EXIT=$exit\n--stdout--\n$stdout\n--stderr--\n$stderr"
     }
 
+    // ---------------------------------------------------------------- 常驻会话
+
+    /**
+     * 启动常驻 vkbd 进程：键盘挂载后不销毁，靠 stdin 收指令发键。
+     * 返回会话句柄，失败返回 null。
+     */
+    fun startVkbdSession(ctx: Context): VkbdSession? {
+        val path = vkbdPath(ctx)
+        Log.i(TAG, "[SHZ] startVkbdSession path=$path alive=${isAlive()} perm=${hasPermission()}")
+
+        if (!isAlive() || !hasPermission() || isPreV11()) {
+            Log.w(TAG, "[SHZ] startVkbdSession 前置不满足 alive=${isAlive()} perm=${hasPermission()}")
+            return null
+        }
+
+        return try {
+            val binder: IBinder = Shizuku.getBinder() ?: return null
+            val svc = IShizukuService.Stub.asInterface(binder)
+            val rp = svc.newProcess(arrayOf(path), null, null)
+            val pfd = rp.outputStream ?: run {
+                rp.destroy()
+                return null
+            }
+            VkbdSession(rp, ParcelFileDescriptor.AutoCloseOutputStream(pfd))
+        } catch (t: Throwable) {
+            Log.e(TAG, "[SHZ] startVkbdSession 异常", t)
+            null
+        }
+    }
+
     // ---------------------------------------------------------------- 内部工具
 
     private fun pfdToStream(rp: IRemoteProcess, stdout: Boolean): InputStream? = try {
@@ -147,5 +156,70 @@ object ShizukuBridge {
             sb.append("(读 $tag 出错: $t)\n")
         }
         return sb.toString().trim()
+    }
+}
+
+/**
+ * 常驻 vkbd 进程会话：持有进程引用 + stdin 写端。
+ * 点键 = 往 stdin 写一个字节；关闭 = 关 stdin 让 vkbd EOF 退出并销毁键盘。
+ */
+class VkbdSession(
+    private val process: IRemoteProcess,
+    private val stdin: OutputStream
+) {
+    // 后台读 stdout/stderr，防止 pipe 缓冲满导致 vkbd 的 printf 阻塞卡死
+    private val drainThread = Thread({
+        try {
+            process.inputStream?.let { pfd ->
+                drain(ParcelFileDescriptor.AutoCloseInputStream(pfd))
+            }
+        } catch (_: Throwable) {
+        }
+        try {
+            process.errorStream?.let { pfd ->
+                drain(ParcelFileDescriptor.AutoCloseInputStream(pfd))
+            }
+        } catch (_: Throwable) {
+        }
+    }, "vkbd-drain").apply {
+        isDaemon = true
+        start()
+    }
+
+    private fun drain(`is`: InputStream) {
+        val buf = ByteArray(256)
+        try {
+            while (`is`.read(buf) != -1) {
+                // 丢弃输出，只为排空
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    /** 发一次 Shift，成功返回 true（写 stdin 失败说明进程已死，返回 false） */
+    fun sendKey(): Boolean = try {
+        stdin.write(1)
+        stdin.flush()
+        true
+    } catch (t: Throwable) {
+        false
+    }
+
+    fun isAlive(): Boolean = try {
+        process.alive()
+    } catch (t: Throwable) {
+        false
+    }
+
+    /** 关闭会话：关 stdin 触发 vkbd EOF → destroy 键盘 → 退出 */
+    fun close() {
+        try {
+            stdin.close()
+        } catch (_: Throwable) {
+        }
+        try {
+            process.destroy()
+        } catch (_: Throwable) {
+        }
     }
 }
