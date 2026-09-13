@@ -7,8 +7,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -17,6 +19,7 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.ContextThemeWrapper
+import android.view.Display
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -50,6 +53,9 @@ class UhidService : Service() {
     private var wm: WindowManager? = null
     private var overlayView: TextView? = null
     private var overlayLp: WindowManager.LayoutParams? = null
+    private var positioner: OverlayPositioner? = null
+    private var dragListener: DragClickTouchListener? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
     private val overlayBgNormal = GradientDrawable()
     private val overlayBgPressed = GradientDrawable()
 
@@ -67,7 +73,14 @@ class UhidService : Service() {
         super.onCreate()
         createChannel()
         initOverlayDrawables()
+        registerDisplayListener()
         Log.i(TAG, "[SVC] onCreate thread=${Thread.currentThread().name}")
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        Log.i(TAG, "[POS] onConfigurationChanged orientation=${newConfig.orientation}")
+        applyScreenChange()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -185,6 +198,7 @@ class UhidService : Service() {
         this.wm = wm
 
         val themed = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault)
+        val listener = DragClickTouchListener()
         val b = TextView(themed).apply {
             text = "⇧"
             textSize = 22f
@@ -196,7 +210,7 @@ class UhidService : Service() {
             minWidth = (56 * d).toInt()
             minHeight = (56 * d).toInt()
             background = overlayBgNormal
-            setOnTouchListener(DragClickTouchListener())
+            setOnTouchListener(listener)
         }
 
         val lp = WindowManager.LayoutParams(
@@ -208,21 +222,80 @@ class UhidService : Service() {
                     or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
+            // 坐标系从屏幕左上角起算（具体位置由 OverlayPositioner 按相对比例算）
             gravity = Gravity.TOP or Gravity.START
-            val d = resources.displayMetrics.density
-            x = (60 * d).toInt()
-            y = (400 * d).toInt()
         }
 
         try {
             wm.addView(b, lp)
             overlayView = b
             overlayLp = lp
-            Log.i(TAG, "[OVERLAY] addView 成功 x=${lp.x} y=${lp.y} flags=0x${Integer.toHexString(lp.flags)}")
+            dragListener = listener
+
+            // 按上次保存的相对位置摆位（无记录则用默认值），不再硬编码绝对像素
+            val p = OverlayPositioner(wm, b, lp)
+            p.refresh()
+            val (rx, ry) = p.loadRel(this)
+            val (x0, y0) = p.relToAbs(rx, ry)
+            lp.x = x0
+            lp.y = y0
+            wm.updateViewLayout(b, lp)
+            positioner = p
+
+            // 首次布局后 View 尺寸才有效，用真实尺寸再校正一次位置
+            var sizeFixed = false
+            b.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                if (!sizeFixed && positioner === p && view.width > 0) {
+                    sizeFixed = true
+                    val (cx, cy) = p.relToAbs(rx, ry)
+                    if (cx != lp.x || cy != lp.y) p.applyNow(cx, cy)
+                }
+            }
+
+            Log.i(TAG, "[OVERLAY] addView 成功 x=$x0 y=$y0 relX=$rx relY=$ry "
+                    + "flags=0x${Integer.toHexString(lp.flags)}")
         } catch (t: Throwable) {
             Log.e(TAG, "[OVERLAY] addView 抛异常", t)
             Toast.makeText(this, "悬浮窗创建失败，看日志", Toast.LENGTH_LONG).show()
         }
+    }
+
+    // ---------------------------------------------------------------- 屏幕尺寸变化
+
+    /** 兜底监听：捕获折叠屏/多窗口/外接屏的尺寸变化（主路径是 onConfigurationChanged） */
+    private fun registerDisplayListener() {
+        if (displayListener != null) return
+        val dm = getSystemService(DISPLAY_SERVICE) as? DisplayManager ?: return
+        val l = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) {}
+            override fun onDisplayRemoved(displayId: Int) {}
+            override fun onDisplayChanged(displayId: Int) {
+                if (displayId == Display.DEFAULT_DISPLAY) applyScreenChange()
+            }
+        }
+        dm.registerDisplayListener(l, main)
+        displayListener = l
+        Log.i(TAG, "[POS] DisplayListener 已注册")
+    }
+
+    private fun unregisterDisplayListener() {
+        val l = displayListener ?: return
+        (getSystemService(DISPLAY_SERVICE) as? DisplayManager)?.unregisterDisplayListener(l)
+        displayListener = null
+        Log.i(TAG, "[POS] DisplayListener 已注销")
+    }
+
+    /** 屏幕尺寸/方向变化：按相对比例重算位置并平滑归位 */
+    private fun applyScreenChange() {
+        val p = positioner ?: return
+        // 先按「变化前」的尺寸算出相对比例
+        val (rx, ry) = p.absToRel()
+        // 刷新屏幕尺寸；没变就直接返回（吸收 config + display 双触发的冗余回调）
+        if (!p.refresh()) return
+        Log.i(TAG, "[POS] 屏幕尺寸变化 → 按比例归位 relX=$rx relY=$ry")
+        dragListener?.resetDragging() // 打断拖动，避免松手时用旧坐标反算比例
+        val (x, y) = p.relToAbs(rx, ry)
+        p.animateTo(x, y)
     }
 
     private fun flashOverlay() {
@@ -237,12 +310,20 @@ class UhidService : Service() {
         private var startY = 0
         private var rawX = 0f
         private var rawY = 0f
-        private var dragging = false
+        var dragging = false
+            private set
+
+        /** 供旋转时打断拖动 */
+        fun resetDragging() {
+            dragging = false
+        }
 
         override fun onTouch(v: View, e: MotionEvent): Boolean {
+            val p = positioner ?: return true
+            val lp = overlayLp ?: return true
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    val lp = overlayLp ?: return true
+                    p.cancelAnimation() // 拖动打断归位动画，保证跟手
                     startX = lp.x
                     startY = lp.y
                     rawX = e.rawX
@@ -251,36 +332,26 @@ class UhidService : Service() {
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val lp = overlayLp ?: return true
                     val dx = (e.rawX - rawX).toInt()
                     val dy = (e.rawY - rawY).toInt()
                     if (abs(dx) > 16 || abs(dy) > 16) dragging = true
                     if (dragging) {
-                        lp.x = clampToScreen(startX + dx, isX = true)
-                        lp.y = clampToScreen(startY + dy, isX = false)
-                        wm?.updateViewLayout(v, lp)
+                        p.applyNow(p.clampX(startX + dx), p.clampY(startY + dy))
                     }
                     return true
                 }
-                MotionEvent.ACTION_UP -> {
-                    if (!dragging) {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (dragging) {
+                        p.saveRel(this@UhidService) // 拖动结束记住相对位置
+                    } else if (e.actionMasked == MotionEvent.ACTION_UP) {
                         flashOverlay()
                         sendShiftAsync("overlay")
                     }
+                    dragging = false
                     return true
                 }
             }
             return false
-        }
-
-        private fun clampToScreen(value: Int, isX: Boolean): Int {
-            val screen = if (isX) resources.displayMetrics.widthPixels
-            else resources.displayMetrics.heightPixels
-            val size = if (isX) overlayView?.width ?: 0 else overlayView?.height ?: 0
-            var v = value
-            if (v < 0) v = 0
-            if (v > screen - size - 20) v = screen - size - 20
-            return v
         }
     }
 
@@ -344,6 +415,12 @@ class UhidService : Service() {
             }
         }
         vkbdSession = null
+
+        // 收起悬浮窗相关监听与动画（防泄漏）
+        unregisterDisplayListener()
+        positioner?.cancelAnimation()
+        positioner = null
+        dragListener = null
 
         overlayView?.let { v ->
             try {
