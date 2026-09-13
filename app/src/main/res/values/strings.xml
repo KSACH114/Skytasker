@@ -1,7 +1,14 @@
 <resources>
     <string name="app_name">Skytasker</string>
+
+    <!-- 通知 -->
     <string name="notif_channel_name">虚拟键盘常驻</string>
     <string name="notif_channel_desc">光遇虚拟物理键盘前台服务</string>
     <string name="notif_title">光遇虚拟键盘已开启</string>
     <string name="notif_text">悬浮 ⇧ 按钮可发送左 Shift</string>
+
+    <!-- 底栏导航 -->
+    <string name="tab_home">主页</string>
+    <string name="tab_tutorial">教程</string>
+    <string name="tab_about">关于</string>
 </resources>

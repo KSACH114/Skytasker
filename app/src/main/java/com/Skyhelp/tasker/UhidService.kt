@@ -25,8 +25,9 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import com.Skyhelp.tasker.core.AppLog
+import com.Skyhelp.tasker.core.ServiceState
 import kotlin.math.abs
 import java.util.concurrent.Executors
 
@@ -74,6 +75,8 @@ class UhidService : Service() {
         createChannel()
         initOverlayDrawables()
         registerDisplayListener()
+        // 告诉 UI「服务已起来」——主页开关按钮据此显示真实状态
+        ServiceState.setRunning(true)
         Log.i(TAG, "[SVC] onCreate thread=${Thread.currentThread().name}")
     }
 
@@ -118,17 +121,12 @@ class UhidService : Service() {
             val session = ShizukuBridge.startVkbdSession(this@UhidService)
             if (session == null) {
                 Log.e(TAG, "[SVC] 常驻 vkbd 启动失败（Shizuku 未连/未授权？）")
-                main.post {
-                    Toast.makeText(
-                        this@UhidService,
-                        "Shizuku 未连接，无法启动键盘",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                AppLog.e("虚拟键盘启动失败：请先在 App 内连接 Shizuku")
                 return@execute
             }
             vkbdSession = session
             Log.i(TAG, "[SVC] 常驻 vkbd 已启动")
+            AppLog.i("虚拟键盘已就绪")
         }
     }
 
@@ -187,7 +185,7 @@ class UhidService : Service() {
         }
         if (!Settings.canDrawOverlays(this)) {
             Log.e(TAG, "[OVERLAY] canDrawOverlays=false，拒绝 addView（未授权）")
-            Toast.makeText(this, "未授权悬浮窗，请在设置里开启", Toast.LENGTH_LONG).show()
+            AppLog.e("未授予悬浮窗权限，无法显示悬浮按钮")
             return
         }
         val wm = getSystemService(WINDOW_SERVICE) as? WindowManager
@@ -254,9 +252,10 @@ class UhidService : Service() {
 
             Log.i(TAG, "[OVERLAY] addView 成功 x=$x0 y=$y0 relX=$rx relY=$ry "
                     + "flags=0x${Integer.toHexString(lp.flags)}")
+            AppLog.i("悬浮 ⇧ 按钮已显示")
         } catch (t: Throwable) {
             Log.e(TAG, "[OVERLAY] addView 抛异常", t)
-            Toast.makeText(this, "悬浮窗创建失败，看日志", Toast.LENGTH_LONG).show()
+            AppLog.e("悬浮窗创建失败：$t")
         }
     }
 
@@ -378,25 +377,13 @@ class UhidService : Service() {
             val cur = s
             if (cur == null) {
                 Log.e(TAG, "[SEND] 无可用 vkbd 会话（Shizuku 未连/未授权？）")
-                main.post {
-                    Toast.makeText(
-                        this@UhidService,
-                        "Shizuku 未连接，请回 App 点「⓪ 连接 Shizuku」",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                AppLog.e("无法发键：Shizuku 未连接或未授权")
                 return@execute
             }
 
             val ok = cur.sendKey()
             Log.i(TAG, "[SEND] sendKey 结果=$ok")
-            main.post {
-                Toast.makeText(
-                    this@UhidService,
-                    if (ok) "已发送 ⇧" else "发送失败，看日志",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+            AppLog.i(if (ok) "已发送 ⇧（左 Shift）" else "发送 ⇧ 失败")
         }
     }
 
@@ -404,6 +391,9 @@ class UhidService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "[SVC] onDestroy thread=${Thread.currentThread().name}")
+        AppLog.i("悬浮键盘服务已停止")
+        // 先告诉 UI：服务没了（悬浮窗随之消失）
+        ServiceState.setRunning(false)
 
         // 销毁常驻 vkbd 进程（关 stdin → vkbd EOF → destroy 键盘 → 退出）
         vkbdSession?.let { s ->

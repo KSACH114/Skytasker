@@ -55,6 +55,21 @@ object ShizukuBridge {
         Shizuku.requestPermission(requestCode)
     }
 
+    /**
+     * Shizuku 是否认为「用户已拒绝过」。
+     *
+     * ⚠️ HyperOS / ColorOS 上**点一次拒绝就会进入这个状态**，之后
+     * requestPermission 不再弹窗、直接秒回调拒绝（小米设备实测连点 16 次全是拒绝，
+     * 且日志里没有任何授权 Activity 启动记录）。
+     * 此时用户必须重启 Shizuku 服务（或重启手机）后才能重新弹窗。
+     */
+    fun isBlockedByUser(): Boolean = try {
+        Shizuku.shouldShowRequestPermissionRationale()
+    } catch (t: Throwable) {
+        Log.w(TAG, "[SHZ] shouldShowRequestPermissionRationale 异常: $t")
+        false
+    }
+
     /** vkbd 在解压后的 native 库目录里的完整路径 */
     fun vkbdPath(ctx: Context): String =
         ctx.applicationInfo.nativeLibraryDir + "/libvkbd.so"
