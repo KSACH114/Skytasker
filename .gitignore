@@ -13,3 +13,16 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# 构建产物（勿提交打包出来的 APK/AAB）
+*.apk
+*.aab
+# app/release/ 下的 baseline profile 与 metadata 也是构建产物
+app/release/
+
+# 签名文件（含私钥，绝不可外传）
+*.keystore
+*.jks
+
+# Kotlin 2.x 编译缓存
+.kotlin/

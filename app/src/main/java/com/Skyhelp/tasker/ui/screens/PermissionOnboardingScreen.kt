@@ -90,7 +90,7 @@ fun PermissionOnboardingScreen(
 
         PermissionTodoItem(
             title = "Shizuku",
-            description = "免 root 获得系统能力，用于创建虚拟键盘",
+            description = "我们做的一切都需要Shizuku来提供权限",
             granted = perms.shizuku,
             onGrant = {
                 // 服务活着才能申请授权；没跑就只记日志
@@ -108,7 +108,7 @@ fun PermissionOnboardingScreen(
 
         PermissionTodoItem(
             title = "悬浮窗",
-            description = "在游戏画面上方显示 ⇧ 按钮",
+            description = "在游戏上方显示控制模块",
             granted = perms.overlay,
             onGrant = {
                 overlayLauncher.launch(
@@ -122,7 +122,7 @@ fun PermissionOnboardingScreen(
 
         PermissionTodoItem(
             title = "通知（可选）",
-            description = "显示键盘常驻的运行状态",
+            description = "显示键盘运行状态",
             granted = perms.notif,
             onGrant = {
                 if (Build.VERSION.SDK_INT >= 33) {

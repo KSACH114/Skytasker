@@ -56,7 +56,7 @@ fun WelcomeScreen(onNext: () -> Unit, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(12.dp))
 
         Text(
-            text = "一个不用清空蜡烛也可以轻松查看任务的小工具",
+            text = "一个不用清空蜡烛也可以轻松查看光遇任务的小工具",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center

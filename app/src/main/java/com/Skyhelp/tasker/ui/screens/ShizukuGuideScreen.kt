@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -55,9 +56,9 @@ fun ShizukuGuideScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "Shizuku 是一个免 root 就能调用系统（shell / ADB）能力的工具。" +
-                        "有了它，我们不用清空手机、不用 root，就能创建虚拟键盘，" +
-                        "让游戏把按键当成真实键盘。",
+                text = "Shizuku 是一个调用系统（shell / ADB）能力的工具。" +
+                        "在PC版光遇中，电脑的shift键可以在不影响蜡烛的情况下独立地调出任务面板。" +
+                        "本 App 会创建一个虚拟键盘，并且只保留 Shift 键，让光遇进入键盘模式，从而认可 Shift 的操作（大概是这么个意思）",
                 style = MaterialTheme.typography.bodyMedium
             )
 
@@ -68,11 +69,33 @@ fun ShizukuGuideScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "1. 安装 Shizuku（或 SUI）\n" +
-                        "2. 按 App 内指引启动服务（Android 11+ 可用「无线调试」启动，无需电脑）\n" +
+                text = "1. 安装 Shizuku\n" +
+                        "2. 打开Shizuku，找到分步骤指南，按提示完成配对并启动，或在视频平台搜“Shizuku安装教程”\n" +
                         "3. 回到本 App 点「去授权」，允许即可",
                 style = MaterialTheme.typography.bodyMedium
             )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = "下载地址（长按可复制）",
+                style = MaterialTheme.typography.titleMedium
+            )
+            // SelectionContainer：让链接文本可长按选中 / 复制
+            SelectionContainer {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "1. https://apt.izzysoft.de/fdroid/index/apk/moe.shizuku.privileged.api",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "2. https://shizuku.rikka.app/zh-hans/download/",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
 
             Spacer(Modifier.height(4.dp))
 
