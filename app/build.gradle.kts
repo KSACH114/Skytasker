@@ -18,6 +18,14 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // 只打包 arm64-v8a：
+            // - 《光·遇》本体不支持 32 位设备
+            // - libvkbd.so 只有 arm64-v8a 一份，其它 ABI 本来就跑不起来
+            // - 模拟器也用不上（本 App 依赖真实 HID 设备）
+            abiFilters.add("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -31,12 +39,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
+    // 已移除 externalNativeBuild：原 src/main/cpp 是 Studio 模板残留，
+    // 编出的 libtasker.so 无任何代码引用（已随 cpp 目录一并删除）。
+    // 项目现在唯一的原生产物是预编译的 libvkbd.so，直接放在 jniLibs/ 下。
     buildFeatures {
         // 主界面已改用 Jetpack Compose，不再需要 viewBinding
         compose = true
