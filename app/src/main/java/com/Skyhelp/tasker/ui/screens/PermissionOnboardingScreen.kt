@@ -90,7 +90,7 @@ fun PermissionOnboardingScreen(
 
         PermissionTodoItem(
             title = "Shizuku",
-            description = "我们做的一切都需要Shizuku来提供权限",
+            description = "必需项，App 的全部功能都依赖它提供权限",
             granted = perms.shizuku,
             onGrant = {
                 // 服务活着才能申请授权；没跑就只记日志
@@ -108,7 +108,7 @@ fun PermissionOnboardingScreen(
 
         PermissionTodoItem(
             title = "悬浮窗",
-            description = "在游戏上方显示控制模块",
+            description = "必需项，在游戏画面上方显示悬浮按钮",
             granted = perms.overlay,
             onGrant = {
                 overlayLauncher.launch(

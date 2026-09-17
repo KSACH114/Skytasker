@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
-import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Handler
@@ -24,7 +23,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.TextView
+import android.widget.ImageView
 import androidx.core.app.NotificationCompat
 import com.Skyhelp.tasker.core.AppLog
 import com.Skyhelp.tasker.core.ServiceState
@@ -32,7 +31,10 @@ import kotlin.math.abs
 import java.util.concurrent.Executors
 
 /**
- * 前台服务：持有悬浮 ⇧ 按钮。
+ * 前台服务：持有悬浮图标按钮（发键触发器）。
+ *
+ * 图标直接使用 icon.png 的透明通道，**不叠加底色** —— 它悬浮在所有应用最上层，
+ * 加底衬等于在游戏画面上糊一块色块。
  *
  * 悬浮窗用 FLAG_NOT_FOCUSABLE，点击时不会抢走《光·遇》的窗口焦点，
  * 这样通过 Shizuku 发出去的 Shift 键才能被游戏收到。
@@ -49,16 +51,16 @@ class UhidService : Service() {
         private const val NOTIF_ID = 101
         /** 两次发送的最小间隔：vkbd 一次完整执行约 1~2s，间隔太短会前后重叠 */
         private const val DEBOUNCE_MS = 2000L
+        /** 悬浮按钮边长（dp）—— 图标本身留白较多，取此值让可见图案接近常规按钮大小 */
+        private const val OVERLAY_BTN_DP = 60
     }
 
     private var wm: WindowManager? = null
-    private var overlayView: TextView? = null
+    private var overlayView: ImageView? = null
     private var overlayLp: WindowManager.LayoutParams? = null
     private var positioner: OverlayPositioner? = null
     private var dragListener: DragClickTouchListener? = null
     private var displayListener: DisplayManager.DisplayListener? = null
-    private val overlayBgNormal = GradientDrawable()
-    private val overlayBgPressed = GradientDrawable()
 
     private val worker = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
@@ -73,7 +75,6 @@ class UhidService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        initOverlayDrawables()
         registerDisplayListener()
         // 告诉 UI「服务已起来」——主页开关按钮据此显示真实状态
         ServiceState.setRunning(true)
@@ -169,15 +170,6 @@ class UhidService : Service() {
 
     // ---------------------------------------------------------------- 悬浮窗
 
-    private fun initOverlayDrawables() {
-        overlayBgNormal.setColor(0xCC1A1A1A.toInt())
-        overlayBgNormal.cornerRadius = 56f
-        overlayBgNormal.setStroke(3, 0xFFFFFFFF.toInt())
-        overlayBgPressed.setColor(0xE66E4AFF.toInt())
-        overlayBgPressed.cornerRadius = 56f
-        overlayBgPressed.setStroke(3, 0xFFFFFFFF.toInt())
-    }
-
     private fun addOverlayIfNeeded() {
         if (overlayView != null) {
             Log.i(TAG, "[OVERLAY] 悬浮窗已存在，跳过")
@@ -197,23 +189,20 @@ class UhidService : Service() {
 
         val themed = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault)
         val listener = DragClickTouchListener()
-        val b = TextView(themed).apply {
-            text = "⇧"
-            textSize = 22f
-            setTextColor(0xFFFFFFFF.toInt())
-            gravity = Gravity.CENTER
-            val d = resources.displayMetrics.density
-            val pad = (14 * d).toInt()
-            setPadding(pad, pad, pad, pad)
-            minWidth = (56 * d).toInt()
-            minHeight = (56 * d).toInt()
-            background = overlayBgNormal
+        val density = resources.displayMetrics.density
+        val btnPx = (OVERLAY_BTN_DP * density).toInt()
+
+        // 纯透明图标：不加背景色，保留 icon.png 自带的透明通道
+        val b = ImageView(themed).apply {
+            setImageResource(R.drawable.icon)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "发送 Shift"
             setOnTouchListener(listener)
         }
 
         val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            btnPx,
+            btnPx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
@@ -252,7 +241,7 @@ class UhidService : Service() {
 
             Log.i(TAG, "[OVERLAY] addView 成功 x=$x0 y=$y0 relX=$rx relY=$ry "
                     + "flags=0x${Integer.toHexString(lp.flags)}")
-            AppLog.i("悬浮 ⇧ 按钮已显示")
+            AppLog.i("悬浮按钮已显示")
         } catch (t: Throwable) {
             Log.e(TAG, "[OVERLAY] addView 抛异常", t)
             AppLog.e("悬浮窗创建失败：$t")
@@ -297,10 +286,11 @@ class UhidService : Service() {
         p.animateTo(x, y)
     }
 
+    /** 按下反馈：纯透明图标没有背景可替换，改为透明度变化 */
     private fun flashOverlay() {
         val v = overlayView ?: return
-        v.background = overlayBgPressed
-        main.postDelayed({ overlayView?.background = overlayBgNormal }, 150L)
+        v.alpha = 0.55f
+        main.postDelayed({ v.alpha = 1f }, 150L)
     }
 
     /** 拖动 + 点击判定：位移超阈值算拖动（移动按钮），否则算点击（发键） */
@@ -383,7 +373,7 @@ class UhidService : Service() {
 
             val ok = cur.sendKey()
             Log.i(TAG, "[SEND] sendKey 结果=$ok")
-            AppLog.i(if (ok) "已发送 ⇧（左 Shift）" else "发送 ⇧ 失败")
+            AppLog.i(if (ok) "已发送 Shift（左 Shift）" else "发送 Shift 失败")
         }
     }
 

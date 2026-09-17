@@ -1,5 +1,6 @@
 package com.Skyhelp.tasker.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,9 +21,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.Skyhelp.tasker.R
 
 /** 关于页 */
 @Composable
@@ -43,17 +48,19 @@ fun AboutScreen(modifier: Modifier = Modifier) {
     ) {
         Spacer(Modifier.height(24.dp))
 
+        // 双层图标：与桌面自适应图标、OOBE 欢迎页保持同一套视觉
         Box(
             modifier = Modifier
                 .size(88.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .clip(RoundedCornerShape(20.dp))
+                .background(colorResource(R.color.ic_launcher_background)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "⇧",
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+            Image(
+                painter = painterResource(R.drawable.icon),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(0.79f)
             )
         }
 
@@ -71,7 +78,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(20.dp))
         Text(
-            text = "一个不用清空蜡烛也可以轻松查看任务的小工具",
+            text = "不用清空蜡烛，也能随时查看《光·遇》任务",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -84,7 +91,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
         HorizontalDivider()
         InfoRow("核心能力", "Shizuku + UHID 虚拟键盘")
         HorizontalDivider()
-        InfoRow("开源许可", "MIT")
+        InfoRow("授权方式", "免 root")
         HorizontalDivider()
 
         Spacer(Modifier.weight(1f))

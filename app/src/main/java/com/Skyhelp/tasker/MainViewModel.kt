@@ -50,7 +50,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
     private val onPermResult = Shizuku.OnRequestPermissionResultListener { _, result ->
         val granted = result == PackageManager.PERMISSION_GRANTED
-        AppLog.i("Shizuku 授权结果：${if (granted) "已授权" else "被拒绝"}")
+        if (granted) {
+            AppLog.i("Shizuku 授权结果：已授权")
+        } else {
+            // 两种常见成因给不同提示，否则用户无从下手
+            AppLog.e(
+                if (ShizukuBridge.isBlockedByUser())
+                    "Shizuku 授权被拒绝。系统此前已拦截过授权弹窗，请重启 Shizuku 服务或重启手机后再试"
+                else
+                    "Shizuku 授权被拒绝。若设备装有 SUI，请到 KernelSU / ReSukiSU 管理器里给本 App 授权，SUI 不会弹出系统授权框"
+            )
+        }
         refresh()
     }
 

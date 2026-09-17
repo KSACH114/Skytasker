@@ -3,11 +3,8 @@ package com.Skyhelp.tasker.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,9 +53,9 @@ fun ShizukuGuideScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "Shizuku 是一个调用系统（shell / ADB）能力的工具。" +
-                        "在PC版光遇中，电脑的shift键可以在不影响蜡烛的情况下独立地调出任务面板。" +
-                        "本 App 会创建一个虚拟键盘，并且只保留 Shift 键，让光遇进入键盘模式，从而认可 Shift 的操作（大概是这么个意思）",
+                text = "Shizuku 是一个免 root 调用系统（shell / ADB）能力的工具。\n\n" +
+                        "PC 版《光·遇》中，键盘的 Shift 键可以在不干扰蜡烛的情况下单独调出任务面板。\n\n" +
+                        "本 App 会创建一个虚拟键盘，并且只保留 Shift 键，让游戏进入键盘模式，从而认可 Shift 的操作。",
                 style = MaterialTheme.typography.bodyMedium
             )
 
@@ -69,9 +66,9 @@ fun ShizukuGuideScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "1. 安装 Shizuku\n" +
-                        "2. 打开Shizuku，找到分步骤指南，按提示完成配对并启动，或在视频平台搜“Shizuku安装教程”\n" +
-                        "3. 回到本 App 点「去授权」，允许即可",
+                text = "1. 安装 Shizuku 或 SUI\n" +
+                        "2. 打开 Shizuku，按「分步骤指南」完成配对并启动服务；也可以去视频平台搜「Shizuku 安装教程」\n" +
+                        "3. 回到本 App 的权限页，点一下「Shizuku」那一整条，在弹窗里选「允许」即可",
                 style = MaterialTheme.typography.bodyMedium
             )
 

@@ -3,9 +3,9 @@
 
     <!-- 通知 -->
     <string name="notif_channel_name">虚拟键盘常驻</string>
-    <string name="notif_channel_desc">光遇虚拟物理键盘前台服务</string>
-    <string name="notif_title">光遇虚拟键盘已开启</string>
-    <string name="notif_text">悬浮 ⇧ 按钮可发送左 Shift</string>
+    <string name="notif_channel_desc">保持光遇虚拟键盘常驻运行</string>
+    <string name="notif_title">虚拟键盘运行中</string>
+    <string name="notif_text">点击悬浮图标即可查看任务</string>
 
     <!-- 底栏导航 -->
     <string name="tab_home">主页</string>
